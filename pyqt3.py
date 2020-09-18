@@ -19,9 +19,12 @@ class MainWindow(QWidget):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
         
+        #初期化（一度しか通らないよね・・・？）
         self.image = None
         self.playing = False#再生中
         self.stream = None#pyaudio
+        self.frame_offset = 0#スタートの時のフレーム位置
+        self.prepare_imgs_num = 1024#プレイ時に何枚のフレームを準備しておくか。
         
         #音
         #pygame.mixer.init(frequency = 44100)
@@ -29,6 +32,7 @@ class MainWindow(QWidget):
         #リスト
         self.movs = []
         self.sliders = []
+        self.imgs = []#再生のときにコンバート済みを準備したい。
         # 横のレイアウト
         #self.horizon = QHBoxLayout()
         # 縦のレイアウト
@@ -63,7 +67,7 @@ class MainWindow(QWidget):
         #self.show()
         
     def load_mov(self):
-        filename = '../mov/nichijo.mp4'
+        filename = '../mov/hff1.mp4'
         cap = cv2.VideoCapture(filename)
         #fourcc = cv2.VideoWriter_fourcc('H','2','6','4')  #fourccを定義
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -101,7 +105,7 @@ class MainWindow(QWidget):
         
     def run_audio(self, wf, fps):
         rate = wf.getframerate()
-        chunk = (int)(rate/fps)
+        chunk = (int)((rate/fps)*2)
         data = wf.readframes(chunk)
         self.stream.write(data)
     
@@ -126,8 +130,24 @@ class MainWindow(QWidget):
         self.set_mov_slider(cap)
         #debug
         #self.show()
-        print("Load fps: " + str(self.movs[0].get(cv2.CAP_PROP_FPS)))
+        print("Load fps: " + str(self.movs[0]['fps']))
         self.update()
+        
+    def prepare_imgs(self):#再生のとき使う画像準備。全部はやっぱだめだわ。
+        imgs = []#初期化
+        index = 0
+        self.frame_offset = self.slider.value()
+        self.movs[0]['cap'].set(cv2.CAP_PROP_POS_FRAMES, self.slider.value())
+        #self.movs[0]['cap'].set(cv2.CAP_PROP_POS_FRAMES, 0)
+        ret, frame = self.movs[0]['cap'].read()
+        while ret and index < self.prepare_imgs_num:
+            cvt_image = self.openCV2Qimage(frame)
+            scaled_image = cvt_image.scaled(cvt_image.width()/2, cvt_image.height()/2)
+            imgs.append(scaled_image)
+            ret, frame = self.movs[0]['cap'].read()
+            index = index + 1
+        self.imgs = imgs
+        
         
     def play(self):
         if self.playing:
@@ -139,25 +159,34 @@ class MainWindow(QWidget):
             self.playing = True
             if self.movs:
                 self.frame_timer.start(1000/self.movs[0]['fps'])
+                self.prepare_imgs()
                 print("start")
         
     def _run(self):
         #動画の更新
         nowFrame = self.slider.value()
         nowFrame = nowFrame + 1
-        self.change_frame(nowFrame, self.movs[0]['cap'])
+        #self.change_frame(nowFrame, self.movs[0]['cap'])
         self.slider.setValue(nowFrame)
+        imgID = nowFrame - self.frame_offset
+        if imgID >= self.prepare_imgs_num - 1:
+            self.prepare_imgs()
+        self.image = self.imgs[imgID]
+        self.update()
+        #self.movs[0]['cap'].
+        #cv2.imshow(self.movs[0]['cap'].)
         self.frame_timer.start(1000/self.movs[0]['fps'])
         #音の更新
-        self.run_audio(self.movs[0]['audio'], self.movs[0]['fps'])
+        if imgID%2 == 0:
+            self.run_audio(self.movs[0]['audio'], self.movs[0]['fps'])
         
     def paintEvent(self, event):
         # デバッグ用
         #print('paintEvent Start')
         painter = QPainter()
         painter.begin(self)
-        painter.setPen(QColor('#FFFFFF'))
-        painter.setBrush(Qt.white)
+        #painter.setPen(QColor('#FFFFFF'))
+        #painter.setBrush(Qt.white)
         #painter.drawRect(event.rect())
         # デバッグ用
         #print('painter tool set')
@@ -169,9 +198,9 @@ class MainWindow(QWidget):
         #painter.drawImage(0, 0, self.image)
         #imgWidth = main_window.movs[0].get(cv2.CAP_PROP_FRAME_WIDTH)
         #imgHeight = main_window.movs[0].get(cv2.CAP_PROP_FRAME_HEIGHT)
-        imgWidth = self.image.width()
-        imgHeight = self.image.height()
-        painter.drawPixmap(0, 0, imgWidth/2, imgHeight/2, QPixmap.fromImage(self.image.scaled(imgWidth/2, imgHeight/2)))
+        #imgWidth = self.image.width()
+        #imgHeight = self.image.height()
+        painter.drawPixmap(0, 0, self.image.width(), self.image.height(), QPixmap.fromImage(self.image))
         #painter.drawPixmap(self.rect(), QPixmap.fromImage(self.image))
         painter.end()
 
