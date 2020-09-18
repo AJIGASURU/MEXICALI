@@ -25,8 +25,7 @@ class MainWindow(QWidget):
         
         #音
         #pygame.mixer.init(frequency = 44100)
-        
-        
+
         #リスト
         self.movs = []
         self.sliders = []
@@ -36,8 +35,8 @@ class MainWindow(QWidget):
         #self.vertical = QVBoxLayout()
         
         #timer
-        self._timer = QTimer()
-        self._timer.timeout.connect(self._run)
+        self.frame_timer = QTimer()
+        self.frame_timer.timeout.connect(self._run)
         
         self.layout = QHBoxLayout()
 
@@ -93,7 +92,6 @@ class MainWindow(QWidget):
         return wf
         #pygame.mixer.music.load("sample.wav")
         
-        
     def change_frame(self, value, cap):
         cap.set(cv2.CAP_PROP_POS_FRAMES, value)
         ret, frame = cap.read()
@@ -101,8 +99,9 @@ class MainWindow(QWidget):
         self.image = self.openCV2Qimage(frame)
         self.update()
         
-    def run_audio(self, wf):
-        chunk = 1024
+    def run_audio(self, wf, fps):
+        rate = wf.getframerate()
+        chunk = (int)(rate/fps)
         data = wf.readframes(chunk)
         self.stream.write(data)
     
@@ -134,12 +133,12 @@ class MainWindow(QWidget):
         if self.playing:
             self.playing = False
             if self.movs:
-                self._timer.stop()
+                self.frame_timer.stop()
                 print("stop")
         else:
             self.playing = True
             if self.movs:
-                self._timer.start(1000/self.movs[0]['fps'])
+                self.frame_timer.start(1000/self.movs[0]['fps'])
                 print("start")
         
     def _run(self):
@@ -148,9 +147,9 @@ class MainWindow(QWidget):
         nowFrame = nowFrame + 1
         self.change_frame(nowFrame, self.movs[0]['cap'])
         self.slider.setValue(nowFrame)
-        self._timer.start(1000/self.movs[0]['fps'])
+        self.frame_timer.start(1000/self.movs[0]['fps'])
         #音の更新
-        self.run_audio(self.movs[0]['audio'])
+        self.run_audio(self.movs[0]['audio'], self.movs[0]['fps'])
         
     def paintEvent(self, event):
         # デバッグ用
