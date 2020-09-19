@@ -70,7 +70,7 @@ class MainWindow(QWidget):
         #self.show()
         
     def load_mov(self):
-        filename = '../mov/hff1.mp4'
+        filename = '../mov/mugi.mp4'
         cap = cv2.VideoCapture(filename)
         #fourcc = cv2.VideoWriter_fourcc('H','2','6','4')  #fourccを定義
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -82,25 +82,33 @@ class MainWindow(QWidget):
         #self.image = self.openCV2Qimage(frame)
         cv2.imshow('frame', frame)
         #clip_input = mp.AudioFileClip(filename)#fps:44100
-        wf = self.load_audio_from_movie(filename)
         #clip_input.preview()
         mov = {'cap':cap, 'fps':fps, 'width':w, 'height':h, 'maxFrame':max_frame}
-        chunk = (int)(wf.getframerate()/fps)
-        wav = {'audio':wf, 'samplerate':wf.getframerate(), 'chunksize':chunk}#チャンクサイズは動画のフレームレートに依存する。編集時のfpsなんて勝手に決めちゃっていいんじゃね。
         self.movs.append(mov)
-        self.wavs.append(wav)
+        
+        wf = self.load_audio_from_movie(filename)
+        if wf is not None:#音声がある場合、
+            chunk = (int)(wf.getframerate()/fps)
+            wav = {'audio':wf, 'samplerate':wf.getframerate(), 'chunksize':chunk}#チャンクサイズは動画のフレームレートに依存する。編集時のfpsなんて勝手に決めちゃっていいんじゃね。
+            self.wavs.append(wav)
         return cap
 
     def load_audio_from_movie(self, filename):
         clip_input = mp.AudioFileClip(filename)#fps:44100
-        clip_input.write_audiofile('../wav/audio.wav')
-        wf = wave.open("../wav/audio.wav", "rb")
-        p = pyaudio.PyAudio()
-        #self.chunk = 1024
-        self.stream = p.open(format=p.get_format_from_width(wf.getsampwidth()), channels=wf.getnchannels(), rate=wf.getframerate(), output=True)
-        #data = wf.readframes(chunk)
-        return wf
-        #pygame.mixer.music.load("sample.wav")
+        try:
+            clip_input.write_audiofile('../wav/audio.wav')
+        except:
+            print("音声の含まれない動画ファイルなので、音声を読み込みませんでした")
+            #sys.exit()
+            return None
+        else:
+            wf = wave.open("../wav/audio.wav", "rb")
+            p = pyaudio.PyAudio()
+            #self.chunk = 1024
+            self.stream = p.open(format=p.get_format_from_width(wf.getsampwidth()), channels=wf.getnchannels(), rate=wf.getframerate(), output=True)
+            #data = wf.readframes(chunk)
+            return wf
+            #pygame.mixer.music.load("sample.wav")
         
     def change_frame(self, value, cap):
         cap.set(cv2.CAP_PROP_POS_FRAMES, value)
