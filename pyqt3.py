@@ -20,19 +20,20 @@ class MainWindow(QWidget):
         super(MainWindow, self).__init__(parent)
         
         #初期化（一度しか通らないよね・・・？）
-        self.image = None
+        #self.image = None
         self.playing = False#再生中
         self.stream = None#pyaudio
-        self.frame_offset = 0#スタートの時のフレーム位置
-        self.prepare_imgs_num = 1024#プレイ時に何枚のフレームを準備しておくか。
+        #self.frame_offset = 0#スタートの時のフレーム位置
+        #self.prepare_imgs_num = 1024#プレイ時に何枚のフレームを準備しておくか。
         
         #音
         #pygame.mixer.init(frequency = 44100)
 
         #リスト
         self.movs = []
+        self.wavs = []#んー複数の音声処理はあとになるかもな。
         self.sliders = []
-        self.imgs = []#再生のときにコンバート済みを準備したい。
+        #self.imgs = []#再生のときにコンバート済みを準備したい。
         # 横のレイアウト
         #self.horizon = QHBoxLayout()
         # 縦のレイアウト
@@ -67,7 +68,7 @@ class MainWindow(QWidget):
         #self.show()
         
     def load_mov(self):
-        filename = '../mov/hff1.mp4'
+        filename = '../mov/nichijo.mp4'
         cap = cv2.VideoCapture(filename)
         #fourcc = cv2.VideoWriter_fourcc('H','2','6','4')  #fourccを定義
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -76,13 +77,16 @@ class MainWindow(QWidget):
         max_frame = cap.get(cv2.CAP_PROP_FRAME_COUNT)
         fourcc = cv2.VideoWriter_fourcc('a','v','c','1')
         ret, frame = cap.read()
-        self.image = self.openCV2Qimage(frame)
-        #cv2.imshow('frame', frame)
+        #self.image = self.openCV2Qimage(frame)
+        cv2.imshow('frame', frame)
         #clip_input = mp.AudioFileClip(filename)#fps:44100
         wf = self.load_audio_from_movie(filename)
         #clip_input.preview()
-        mov = {'cap':cap, 'fps':fps, 'width':w, 'height':h, 'maxFrame':max_frame, 'audio':wf}
+        mov = {'cap':cap, 'fps':fps, 'width':w, 'height':h, 'maxFrame':max_frame}
+        chunk = (int)(wf.getframerate()/fps)
+        wav = {'audio':wf, 'samplerate':wf.getframerate(), 'chunksize':chunk}#チャンクサイズは動画のフレームレートに依存する。編集時のfpsなんて勝手に決めちゃっていいんじゃね。
         self.movs.append(mov)
+        self.wavs.append(wav)
         return cap
 
     def load_audio_from_movie(self, filename):
@@ -99,14 +103,13 @@ class MainWindow(QWidget):
     def change_frame(self, value, cap):
         cap.set(cv2.CAP_PROP_POS_FRAMES, value)
         ret, frame = cap.read()
-        #cv2.imshow('frame', frame)
-        self.image = self.openCV2Qimage(frame)
-        self.update()
+        cv2.imshow('frame', frame)
+        #self.image = self.openCV2Qimage(frame)
+        #self.update()
         
-    def run_audio(self, wf, fps):
-        rate = wf.getframerate()
-        chunk = (int)((rate/fps)*2)
-        data = wf.readframes(chunk)
+    def run_audio(self):
+        chunk = self.wavs[0]['chunksize']
+        data = self.wavs[0]['audio'].readframes(chunk)
         self.stream.write(data)
     
     def set_mov_slider(self, cap):
@@ -132,7 +135,8 @@ class MainWindow(QWidget):
         #self.show()
         print("Load fps: " + str(self.movs[0]['fps']))
         self.update()
-        
+
+        """
     def prepare_imgs(self):#再生のとき使う画像準備。全部はやっぱだめだわ。
         imgs = []#初期化
         index = 0
@@ -147,6 +151,7 @@ class MainWindow(QWidget):
             ret, frame = self.movs[0]['cap'].read()
             index = index + 1
         self.imgs = imgs
+        """
         
         
     def play(self):
@@ -159,27 +164,33 @@ class MainWindow(QWidget):
             self.playing = True
             if self.movs:
                 self.frame_timer.start(1000/self.movs[0]['fps'])
-                self.prepare_imgs()
+                #self.prepare_imgs()
+                #ここにスタート時の準備書くけど関数化しするかも
+                
                 print("start")
         
     def _run(self):
-        #動画の更新
+        self.frame_timer.start((1000/self.movs[0]['fps']))
+        #更新
         nowFrame = self.slider.value()
         nowFrame = nowFrame + 1
-        #self.change_frame(nowFrame, self.movs[0]['cap'])
+        self.run_audio()
+        self.change_frame(nowFrame, self.movs[0]['cap'])
         self.slider.setValue(nowFrame)
+        '''
         imgID = nowFrame - self.frame_offset
         if imgID >= self.prepare_imgs_num - 1:
             self.prepare_imgs()
         self.image = self.imgs[imgID]
         self.update()
-        #self.movs[0]['cap'].
-        #cv2.imshow(self.movs[0]['cap'].)
-        self.frame_timer.start(1000/self.movs[0]['fps'])
+        '''
+        #ret, frame = self.movs[0]['cap'].read()
+        #cv2.imshow(frame)
         #音の更新
-        if imgID%2 == 0:
-            self.run_audio(self.movs[0]['audio'], self.movs[0]['fps'])
-        
+        #if nowFrame%10 == 1:
+        #self.run_audio()
+
+        """
     def paintEvent(self, event):
         # デバッグ用
         #print('paintEvent Start')
@@ -213,8 +224,8 @@ class MainWindow(QWidget):
         #image = QImage(cvImage, width, height, bytesPerLine, QImage.Format_RGB888)
         #image = image.rgbSwapped()
         return image
+        """
 
-        
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     main_window = MainWindow()
