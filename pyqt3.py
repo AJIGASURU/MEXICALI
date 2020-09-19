@@ -14,6 +14,8 @@ import moviepy.editor as mp
 #import pygame
 import pyaudio
 import wave
+#threadingやってみますか
+import threading
  
 class MainWindow(QWidget):
     def __init__(self, parent=None):
@@ -68,7 +70,7 @@ class MainWindow(QWidget):
         #self.show()
         
     def load_mov(self):
-        filename = '../mov/nichijo.mp4'
+        filename = '../mov/hff1.mp4'
         cap = cv2.VideoCapture(filename)
         #fourcc = cv2.VideoWriter_fourcc('H','2','6','4')  #fourccを定義
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -106,16 +108,11 @@ class MainWindow(QWidget):
         cv2.imshow('frame', frame)
         #self.image = self.openCV2Qimage(frame)
         #self.update()
-        
-    def run_audio(self):
-        chunk = self.wavs[0]['chunksize']
-        data = self.wavs[0]['audio'].readframes(chunk)
-        self.stream.write(data)
     
     def set_mov_slider(self, cap):
         #スライダ
         self.slider = QSlider(Qt.Horizontal, self)
-        #self.slider.setFocusPolicy(Qt.NoFocus)#?
+        self.slider.setFocusPolicy(Qt.NoFocus)
         #slider.setGeometry(30, 40, 100, 30)
         self.slider.move(100,400)
         self.slider.resize(500,30)
@@ -168,15 +165,36 @@ class MainWindow(QWidget):
                 #ここにスタート時の準備書くけど関数化しするかも
                 
                 print("start")
+                
+    def run_audio(self):
+        chunk = self.wavs[0]['chunksize'] + 1
+        data = self.wavs[0]['audio'].readframes(chunk)
+        self.stream.write(data)
         
-    def _run(self):
-        self.frame_timer.start((1000/self.movs[0]['fps']))
-        #更新
+    def run_image(self):
         nowFrame = self.slider.value()
         nowFrame = nowFrame + 1
-        self.run_audio()
-        self.change_frame(nowFrame, self.movs[0]['cap'])
+        #self.change_frame(nowFrame, self.movs[0]['cap'])
+        ret, frame = self.movs[0]['cap'].read()
+        cv2.imshow('frame', frame)
         self.slider.setValue(nowFrame)
+        
+    def _run(self):
+        #おそらく、30fpsでframeを送るのが無理、流すときだけfps下げればいい。
+        self.frame_timer.start((1000/self.movs[0]['fps']) - 1) #
+        thread1 = threading.Thread(target=self.run_audio)
+        thread2 = threading.Thread(target=self.run_image)
+        thread1.start()
+        thread2.start()
+        thread1.join()
+        thread2.join()
+        #self.run_audio()
+        #self.run_image()
+        #更新
+        #nowFrame = self.slider.value()
+        #nowFrame = nowFrame + 1
+        #self.change_frame(nowFrame, self.movs[0]['cap'])
+        #self.slider.setValue(nowFrame)
         '''
         imgID = nowFrame - self.frame_offset
         if imgID >= self.prepare_imgs_num - 1:
