@@ -34,7 +34,14 @@ class MainWindow(QWidget):
         #リスト
         self.movs = []
         self.wavs = []#んー複数の音声処理はあとになるかもな。
+        self.master_wav = None#実際に再生する時の音
+        self.master_images = None#実際に再生する時の画像
+        self.frame_rate = 30.0
+        self.sample_rate = 44100.0
+        
+        
         self.sliders = []
+        self.pre_frame = -2#スライダで再生時に使用
         #self.imgs = []#再生のときにコンバート済みを準備したい。
         # 横のレイアウト
         #self.horizon = QHBoxLayout()
@@ -70,7 +77,7 @@ class MainWindow(QWidget):
         #self.show()
         
     def load_mov(self):
-        filename = '../mov/mugi.mp4'
+        filename = '../mov/hff1.mp4'
         cap = cv2.VideoCapture(filename)
         #fourcc = cv2.VideoWriter_fourcc('H','2','6','4')  #fourccを定義
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -94,7 +101,7 @@ class MainWindow(QWidget):
         return cap
 
     def load_audio_from_movie(self, filename):
-        clip_input = mp.AudioFileClip(filename)#fps:44100
+        clip_input = mp.AudioFileClip(filename)#fps:44100固定？
         try:
             clip_input.write_audiofile('../wav/audio.wav')
         except:
@@ -103,6 +110,7 @@ class MainWindow(QWidget):
             return None
         else:
             wf = wave.open("../wav/audio.wav", "rb")
+            print("samplerate: ", wf.getframerate())
             p = pyaudio.PyAudio()
             #self.chunk = 1024
             self.stream = p.open(format=p.get_format_from_width(wf.getsampwidth()), channels=wf.getnchannels(), rate=wf.getframerate(), output=True)
@@ -110,12 +118,17 @@ class MainWindow(QWidget):
             return wf
             #pygame.mixer.music.load("sample.wav")
         
-    def change_frame(self, value, cap):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, value)
-        ret, frame = cap.read()
-        cv2.imshow('frame', frame)
-        #self.image = self.openCV2Qimage(frame)
-        #self.update()
+    def change_slider_value(self, value, cap):
+        #1つ違いの移動->自動移動ということで、手動移動を判断
+        if value - self.pre_frame is not 1:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, value)
+            ret, frame = cap.read()
+            cv2.imshow('frame', frame)
+            self.prepare_audio()
+            #print(str(value), str(self.pre_frame))
+            #self.image = self.openCV2Qimage(frame)
+            #self.update()
+        self.pre_frame = self.slider.value()
     
     def set_mov_slider(self, cap):
         #スライダ
@@ -128,7 +141,7 @@ class MainWindow(QWidget):
         self.slider.setMaximum(cap.get(cv2.CAP_PROP_FRAME_COUNT)-1)
         self.slider.setValue(0)
         self.slider.setSingleStep(1)
-        self.slider.valueChanged.connect(lambda:self.change_frame(int(self.slider.value()), cap))
+        self.slider.valueChanged.connect(lambda:self.change_slider_value(int(self.slider.value()), cap))
         #self.layout.addWidget(self.slider)
         self.slider.show()
         #self.show()
@@ -157,7 +170,12 @@ class MainWindow(QWidget):
             index = index + 1
         self.imgs = imgs
         """
-        
+    def prepare_audio(self):#再生の直前のオーディオ準備
+        #鳴らす時にread_framesするので、ポインタを動かしておくだけで良い。
+        self.wavs[0]['audio'].rewind()
+        if self.slider.value() is not 0:
+            start_frame = (int)((self.slider.value()/self.frame_rate) * self.sample_rate)
+            eliminate_audio = self.wavs[0]['audio'].readframes(start_frame)
         
     def play(self):
         if self.playing:
@@ -170,8 +188,8 @@ class MainWindow(QWidget):
             if self.movs:
                 self.frame_timer.start(1000/self.movs[0]['fps'])
                 #self.prepare_imgs()
+                self.prepare_audio()
                 #ここにスタート時の準備書くけど関数化しするかも
-                
                 print("start")
                 
     def run_audio(self):
@@ -180,15 +198,15 @@ class MainWindow(QWidget):
         self.stream.write(data)
         
     def run_image(self):
-        nowFrame = self.slider.value()
-        nowFrame = nowFrame + 1
+        nowFrame = self.slider.value() + 1
+        #nowFrame = nowFrame + 1
         #self.change_frame(nowFrame, self.movs[0]['cap'])
         ret, frame = self.movs[0]['cap'].read()
         cv2.imshow('frame', frame)
+        print('now:', str(nowFrame),' pre:', str(self.pre_frame))
         self.slider.setValue(nowFrame)
         
     def _run(self):
-        #おそらく、30fpsでframeを送るのが無理、流すときだけfps下げればいい。
         self.frame_timer.start((1000/self.movs[0]['fps']) - 1) #
         thread1 = threading.Thread(target=self.run_audio)
         thread2 = threading.Thread(target=self.run_image)
